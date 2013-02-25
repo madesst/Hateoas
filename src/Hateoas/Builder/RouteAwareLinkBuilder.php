@@ -2,25 +2,25 @@
 
 namespace Hateoas\Builder;
 
+use Hateoas\Link;
 use Hateoas\Factory\Definition\RouteLinkDefinition;
 use Hateoas\Factory\Definition\LinkDefinition;
-use Hateoas\Link;
-use Symfony\Component\Routing\RouterInterface;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\PropertyAccess\PropertyAccess;
 
 /**
  * @author William Durand <william.durand1@gmail.com>
  */
-class LinkBuilder implements LinkBuilderInterface
+class RouteAwareLinkBuilder implements LinkBuilderInterface
 {
     /**
-     * @var RouterInterface
+     * @var UrlGeneratorInterface
      */
-    private $router;
+    private $urlGenerator;
 
-    public function __construct(RouterInterface $router)
+    public function __construct(UrlGeneratorInterface $urlGenerator)
     {
-        $this->router = $router;
+        $this->urlGenerator = $urlGenerator;
     }
 
     /**
@@ -35,10 +35,9 @@ class LinkBuilder implements LinkBuilderInterface
         $parameters = array();
         $accessor   = PropertyAccess::getPropertyAccessor();
 
-        foreach ($definition->getParameters() as $name => $path) {
-            if (is_numeric($name)) {
-                $name = $path;
-            }
+        foreach ($definition->getParameters() as $path) {
+            $name = is_array($path) ? key($path)     : $path;
+            $path = is_array($path) ? current($path) : $path;
 
             $parameters[$name] = $accessor->getValue($data, $path);
         }
@@ -52,15 +51,16 @@ class LinkBuilder implements LinkBuilderInterface
     }
 
     /**
-     * @param  string $route
-     * @param  array  $parameters
-     * @param  string $rel
-     * @param  string $type
+     * @param string $route
+     * @param array  $parameters
+     * @param string $rel
+     * @param string $type
+     *
      * @return Link
      */
     public function create($route, array $parameters = array(), $rel = Link::REL_SELF, $type = null)
     {
-        $url = $this->router->generate($route, $parameters, true);
+        $url = $this->urlGenerator->generate($route, $parameters, true);
 
         return new Link($url, $rel, $type);
     }

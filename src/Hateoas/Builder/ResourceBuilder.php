@@ -97,20 +97,25 @@ class ResourceBuilder implements ResourceBuilderInterface
 
         // total
         if (null !== $total = $collectionDefinition->getTotal()) {
-            $total = $accessor->getValue($collection, $total);
+            if ((is_array($collection) || $collection instanceof \Countable) && 'count()' === $total) {
+                $total = count($collection);
+            } else {
+                $total = $accessor->getValue($collection, $total);
+            }
         }
 
         // limit
         if (null !== $limit = $collectionDefinition->getLimit()) {
-            $limit = $access->getValue($collection, $limit);
+            $limit = $accessor->getValue($collection, $limit);
         }
 
         // page
         if (null !== $page = $collectionDefinition->getPage()) {
-            $page = $access->getValue($collection, $page);
+            $page = $accessor->getValue($collection, $page);
         }
 
         return new Collection(
+            $collectionDefinition->getRootName(),
             $resources,
             $links,
             $total,

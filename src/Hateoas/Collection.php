@@ -2,12 +2,9 @@
 
 namespace Hateoas;
 
-use JMS\Serializer\Annotation\AccessorOrder;
 use JMS\Serializer\Annotation\SerializedName;
 
 /**
- * @AccessorOrder("custom", custom = {"total", "page", "limit", "links", "resources"})
- *
  * @author William Durand <william.durand1@gmail.com>
  */
 class Collection
@@ -38,8 +35,14 @@ class Collection
      */
     private $limit;
 
-    public function __construct(array $resources = array(), array $links = array(), $total = null, $page = null, $limit = null)
+    /**
+     * @var string
+     */
+    private $rootName;
+
+    public function __construct($rootName = null, array $resources = array(), array $links = array(), $total = null, $page = null, $limit = null)
     {
+        $this->rootName  = $rootName;
         $this->resources = $resources;
         $this->links     = $links;
         $this->total     = $total;
@@ -85,5 +88,13 @@ class Collection
     public function getLimit()
     {
         return $this->limit;
+    }
+
+    /**
+     * @return string
+     */
+    public function getRootName()
+    {
+        return $this->rootName;
     }
 }

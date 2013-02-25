@@ -3,9 +3,11 @@
 namespace Hateoas\Serializer;
 
 use Hateoas\Collection;
+use Hateoas\Link;
 use Hateoas\Resource;
 use JMS\Serializer\Handler\SubscribingHandlerInterface;
 use JMS\Serializer\GraphNavigator;
+use JMS\Serializer\JsonSerializationVisitor;
 use JMS\Serializer\XmlSerializationVisitor;
 use Metadata\MetadataFactoryInterface;
 
@@ -27,6 +29,18 @@ class Handler implements SubscribingHandlerInterface
                 'format'    => 'xml',
                 'type'      => 'Hateoas\Collection',
                 'method'    => 'serializeCollectionToXml',
+            ),
+            array(
+                'direction' => GraphNavigator::DIRECTION_SERIALIZATION,
+                'format'    => 'json',
+                'type'      => 'Hateoas\Resource',
+                'method'    => 'serializeResourceToJson',
+            ),
+            array(
+                'direction' => GraphNavigator::DIRECTION_SERIALIZATION,
+                'format'    => 'json',
+                'type'      => 'Hateoas\Collection',
+                'method'    => 'serializeCollectionToJson',
             ),
         );
     }
@@ -74,14 +88,7 @@ class Handler implements SubscribingHandlerInterface
     public function serializeCollectionToXml(XmlSerializationVisitor $visitor, Collection $collection, array $type)
     {
         if (null === $visitor->document) {
-            $reflClass = new \ReflectionClass(get_class($visitor));
-            $reflProp  = $reflClass->getProperty('defaultRootName');
-            $reflProp->setAccessible(true);
-
-            if ('result' === $reflProp->getValue($visitor)) {
-                $visitor->setDefaultRootName('resources');
-            }
-
+            $visitor->setDefaultRootName($collection->getRootName() ?: 'resources');
             $visitor->document = $visitor->createDocument();
         }
 
@@ -107,6 +114,7 @@ class Handler implements SubscribingHandlerInterface
 
         // resources
         foreach ($collection->getResources() as $resource) {
+            $elementName = 'resource';
             if (is_object($resource->getData())
                 && null !== ($m = $this->metadataFactory->getMetadataForClass(get_class($resource->getData())))
             ) {
@@ -123,5 +131,79 @@ class Handler implements SubscribingHandlerInterface
 
             $visitor->revertCurrentNode();
         }
+    }
+
+    public function serializeResourceToJson(JsonSerializationVisitor $visitor, Resource $resource, array $type)
+    {
+        $metadata  = $this->metadataFactory
+            ->getMetadataForClass(get_class($resource))
+            ->propertyMetadata['links'];
+        $linksName = $metadata->serializedName ?: '_links';
+
+        // inline
+        $data = $visitor->getNavigator()->accept($resource->getData(), null, $visitor);
+        $data[$linksName] = $this->getLinksFrom($resource);
+
+        $visitor->setRoot($data);
+
+        return $data;
+    }
+
+    public function serializeCollectionToJson(JsonSerializationVisitor $visitor, Collection $collection, array $type)
+    {
+        $metadata  = $this->metadataFactory
+            ->getMetadataForClass(get_class($collection))
+            ->propertyMetadata['links'];
+        $linksName = $metadata->serializedName ?: '_links';
+        $rootName  = $collection->getRootName() ?: 'resources';
+
+        // attributes
+        foreach (array('total', 'page', 'limit') as $attr) {
+            if ($value = $collection->{'get' . ucfirst($attr)}()) {
+                $data[$attr] = $value;
+            }
+        }
+
+        // links
+        $data[$linksName]  = $this->getLinksFrom($collection);
+        // resources
+        $data[$rootName] = array();
+        foreach ($collection->getResources() as $resource) {
+            $data[$rootName][] = $visitor->getNavigator()->accept($resource, null, $visitor);
+        }
+
+        $visitor->setRoot($data);
+    }
+
+    private function getLinksFrom($object)
+    {
+        $links = array();
+        foreach ($object->getLinks() as $link) {
+            $data         = array();
+            $data['href'] = $link->getHref();
+
+            if (null !== $type = $link->getType()) {
+                $data['type'] = $type;
+            }
+
+            if (isset($links[$link->getRel()])) {
+                // in order to support multiple links per "rel"
+                // we need to transform the "rel" element into
+                // an array, so that we can add oher "rel"
+                // elements
+                if (isset($links[$link->getRel()]['href'])) {
+                    $element = $links[$link->getRel()];
+
+                    $links[$link->getRel()] = array();
+                    $links[$link->getRel()][] = $element;
+                }
+
+                $links[$link->getRel()][] = $data;
+            } else {
+                $links[$link->getRel()] = $data;
+            }
+        }
+
+        return $links;
     }
 }
